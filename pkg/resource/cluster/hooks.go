@@ -32,26 +32,16 @@ import (
 var syncTags = sync.Tags
 
 // transitionalStatuses are the cluster states during which the DSQL API
-// rejects mutations. Updates issued while the cluster is in one of these
-// states return a validation error, so we requeue instead.
-//
-// PENDING_SETUP is intentionally NOT included. A multi-Region cluster created
-// with a witness Region but no linked peer stays in PENDING_SETUP until
-// bidirectional peering is established, which may never happen. DSQL accepts
-// UpdateCluster (and DeleteCluster) while in PENDING_SETUP, so treating it as
-// transitional would make such a cluster permanently un-updatable and
-// un-deletable through the controller (e.g. disabling deletionProtectionEnabled
-// before delete). Allowing mutations in PENDING_SETUP lets these clusters be
-// reconciled and torn down normally.
+// rejects mutations, so we requeue instead. PENDING_SETUP is excluded: DSQL
+// accepts updates/deletes in that state, and including it would leave a
+// permanently-pending multi-region cluster un-updatable and un-deletable.
 var transitionalStatuses = map[string]struct{}{
 	"CREATING": {},
 	"UPDATING": {},
 }
 
-// requeueIfTransitional returns an ackrequeue error if the latest cluster
-// status is one of the transitional states during which DSQL rejects
-// mutations (CREATING, UPDATING). Returns nil if the cluster is in a state
-// that accepts mutations (including PENDING_SETUP) so the update can proceed.
+// requeueIfTransitional requeues if the cluster is in a state where DSQL
+// rejects mutations; it returns nil otherwise so the update can proceed.
 func requeueIfTransitional(latest *resource) error {
 	if latest.ko.Status.Status == nil {
 		return nil
