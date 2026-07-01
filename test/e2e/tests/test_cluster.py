@@ -29,6 +29,8 @@ import pytest
 import time
 import logging
 
+from kubernetes.client.rest import ApiException
+
 from acktest.resources import random_suffix_name
 from acktest.k8s import resource as k8s
 from acktest.k8s import condition
@@ -109,11 +111,14 @@ def _teardown_cluster(ref):
         time.sleep(UPDATE_WAIT_AFTER_SECONDS)
         _, deleted = k8s.delete_custom_resource(ref, 3, 10)
         assert deleted, f"cluster CR {getattr(ref, 'name', ref)} was not deleted"
+    except ApiException as e:
+        # 404 means the CR is already gone (deleted successfully), not a leak.
+        if e.status == 404:
+            return
+        logging.error("Teardown of cluster CR %s failed: %s", getattr(ref, "name", ref), e)
+        raise
     except Exception as e:
-        logging.error(
-            "Teardown of cluster CR %s failed: %s",
-            getattr(ref, "name", ref), e,
-        )
+        logging.error("Teardown of cluster CR %s failed: %s", getattr(ref, "name", ref), e)
         raise
 
 
