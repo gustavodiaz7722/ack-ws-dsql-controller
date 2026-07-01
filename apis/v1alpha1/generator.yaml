@@ -50,6 +50,8 @@ resources:
         template_path: hooks/cluster/sdk_read_one_post_set_output.go.tpl
       sdk_update_pre_build_request:
         template_path: hooks/cluster/sdk_update_pre_build_request.go.tpl
+      sdk_update_post_build_request:
+        template_path: hooks/cluster/sdk_update_post_build_request.go.tpl
     exceptions:
       terminal_codes:
         - ValidationException
