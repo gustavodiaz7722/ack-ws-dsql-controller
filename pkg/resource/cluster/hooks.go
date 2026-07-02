@@ -32,18 +32,16 @@ import (
 var syncTags = sync.Tags
 
 // transitionalStatuses are the cluster states during which the DSQL API
-// rejects mutations. Updates issued while the cluster is in one of these
-// states return a validation error, so we requeue instead.
+// rejects mutations, so we requeue instead. PENDING_SETUP is excluded: DSQL
+// accepts updates/deletes in that state, and including it would leave a
+// permanently-pending multi-region cluster un-updatable and un-deletable.
 var transitionalStatuses = map[string]struct{}{
-	"CREATING":      {},
-	"UPDATING":      {},
-	"PENDING_SETUP": {},
+	"CREATING": {},
+	"UPDATING": {},
 }
 
-// requeueIfTransitional returns an ackrequeue error if the latest cluster
-// status is one of the transitional states during which DSQL rejects
-// mutations. Returns nil if the cluster is in a stable state and the update
-// can proceed.
+// requeueIfTransitional requeues if the cluster is in a state where DSQL
+// rejects mutations; it returns nil otherwise so the update can proceed.
 func requeueIfTransitional(latest *resource) error {
 	if latest.ko.Status.Status == nil {
 		return nil

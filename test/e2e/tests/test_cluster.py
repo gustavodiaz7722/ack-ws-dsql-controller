@@ -29,6 +29,8 @@ import pytest
 import time
 import logging
 
+from kubernetes.client.rest import ApiException
+
 from acktest.resources import random_suffix_name
 from acktest.k8s import resource as k8s
 from acktest.k8s import condition
@@ -100,27 +102,24 @@ def _get_aws_cluster_policy(dsql_client, identifier):
 def _teardown_cluster(ref):
     """Disable deletion protection and delete a Cluster CR.
 
-    Patches the CR to set deletionProtectionEnabled=false, waits for the
-    controller to reconcile, then deletes the CR. This ensures the controller
-    can successfully call DeleteCluster in AWS.
-
-    Failures here are logged rather than raised so that one resource's teardown
-    does not mask a test result, but they are NOT silently swallowed: any
-    cluster left behind is reclaimed by the region-wide sweep in
-    service_cleanup.py, which disables deletion protection before deleting.
+    Re-raises on failure so a cluster the controller cannot delete fails the
+    test instead of leaking silently.
     """
     try:
         updates = {"spec": {"deletionProtectionEnabled": False}}
         k8s.patch_custom_resource(ref, updates)
         time.sleep(UPDATE_WAIT_AFTER_SECONDS)
         _, deleted = k8s.delete_custom_resource(ref, 3, 10)
-        assert deleted
+        assert deleted, f"cluster CR {getattr(ref, 'name', ref)} was not deleted"
+    except ApiException as e:
+        # 404 means the CR is already gone (deleted successfully), not a leak.
+        if e.status == 404:
+            return
+        logging.error("Teardown of cluster CR %s failed: %s", getattr(ref, "name", ref), e)
+        raise
     except Exception as e:
-        logging.warning(
-            "Teardown of cluster CR %s did not complete cleanly: %s. "
-            "The service_cleanup sweep will reclaim it if it leaked.",
-            getattr(ref, "name", ref), e,
-        )
+        logging.error("Teardown of cluster CR %s failed: %s", getattr(ref, "name", ref), e)
+        raise
 
 
 def _wait_for_aws_cluster_status(dsql_client, identifier, target_statuses,
