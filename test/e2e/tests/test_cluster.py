@@ -692,8 +692,12 @@ class TestCluster:
                 if c is None or c.get("status") == "DELETED":
                     break
 
-            # Delete peer cluster
+            # Disable deletion protection (enabled by default) before deleting.
             try:
+                peer_dsql.update_cluster(
+                    identifier=peer_identifier,
+                    deletionProtectionEnabled=False,
+                )
                 peer_dsql.delete_cluster(identifier=peer_identifier)
                 logging.info(f"Deleted peer cluster {peer_identifier}")
             except Exception as e:
